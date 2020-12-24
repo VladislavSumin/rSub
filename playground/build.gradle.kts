@@ -33,6 +33,7 @@ dependencies {
 
         implementation(log4j2Api)
         implementation(log4j2Core)
+        implementation(log4jSlf4jImpl)
     }
 }
 
