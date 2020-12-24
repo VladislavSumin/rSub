@@ -3,7 +3,7 @@ package ru.falseteam.config
 object Configuration {
     object Versions {
         const val kotlin = "1.4.20"
-        const val ktor = "1.4.3"
+        const val ktor = "1.5.0"
         const val log4j2 = "2.13.3"
     }
 
@@ -13,7 +13,8 @@ object Configuration {
             const val reflect = "org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}"
         }
 
-        const val ktor = "io.ktor:ktor-server-netty:${Versions.ktor}"
+        const val ktorServer = "io.ktor:ktor-server-netty:${Versions.ktor}"
+        const val ktorClient = "io.ktor:ktor-client-okhttp:${Versions.ktor}"
         const val ktorWebSocket = "io.ktor:ktor-websockets:${Versions.ktor}"
         const val ktorSerialization = "io.ktor:ktor-serialization:${Versions.ktor}"
 

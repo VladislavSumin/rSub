@@ -26,7 +26,7 @@ dependencies {
         implementation(reflect)
     }
     with(Dependencies) {
-        implementation(ktor)
+        implementation(ktorServer)
         implementation(ktorWebSocket)
         implementation(ktorSerialization)
 
