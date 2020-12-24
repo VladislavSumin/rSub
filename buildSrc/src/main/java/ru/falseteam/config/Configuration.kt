@@ -16,6 +16,7 @@ object Configuration {
         const val ktorServer = "io.ktor:ktor-server-netty:${Versions.ktor}"
         const val ktorClient = "io.ktor:ktor-client-okhttp:${Versions.ktor}"
         const val ktorWebSocket = "io.ktor:ktor-websockets:${Versions.ktor}"
+        const val ktorClientWebSocket = "io.ktor:ktor-client-websockets:${Versions.ktor}"
         const val ktorSerialization = "io.ktor:ktor-serialization:${Versions.ktor}"
 
         const val log4j2Api = "org.apache.logging.log4j:log4j-api:${Versions.log4j2}"

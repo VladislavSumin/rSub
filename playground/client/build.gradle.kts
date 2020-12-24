@@ -27,7 +27,7 @@ dependencies {
     }
     with(Dependencies) {
         implementation(ktorClient)
-        implementation(ktorWebSocket)
+        implementation(ktorClientWebSocket)
         implementation(ktorSerialization)
 
         implementation(log4j2Api)
