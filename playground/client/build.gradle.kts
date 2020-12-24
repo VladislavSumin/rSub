@@ -3,8 +3,8 @@ import ru.falseteam.config.Configuration.Dependencies
 
 plugins {
     java
-    kotlin("jvm") version ru.falseteam.config.Configuration.Versions.kotlin
-    kotlin("plugin.serialization") version ru.falseteam.config.Configuration.Versions.kotlin
+    kotlin("jvm")
+    kotlin("plugin.serialization")
 }
 
 repositories {
@@ -21,10 +21,15 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
-    implementation(project(":playground:server"))
-    implementation(project(":playground:client"))
-
+    with(Dependencies.Kotlin) {
+        implementation(stdLibJdk8)
+        implementation(reflect)
+    }
     with(Dependencies) {
+        implementation(ktorClient)
+        implementation(ktorWebSocket)
+        implementation(ktorSerialization)
+
         implementation(log4j2Api)
         implementation(log4j2Core)
         implementation(log4jSlf4jImpl)
