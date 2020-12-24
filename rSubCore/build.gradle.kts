@@ -26,12 +26,6 @@ dependencies {
         implementation(reflect)
     }
     with(Dependencies) {
-        implementation(ktorServer)
-        implementation(ktorWebSocket)
-        implementation(ktorSerialization)
-
-        implementation(log4j2Api)
-        implementation(log4j2Core)
     }
 }
 

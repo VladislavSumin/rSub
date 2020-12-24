@@ -21,6 +21,7 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
+    implementation(project(":rSubCore"))
     implementation(project(":playground:server"))
     implementation(project(":playground:client"))
 
