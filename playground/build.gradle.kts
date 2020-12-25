@@ -18,6 +18,7 @@ version = "0.1.0"
 dependencies {
     implementation(project(":rSubClient"))
     implementation(project(":rSubServer"))
+    implementation(project(":connectors:rSubKtorWebSocketConnectorCore"))
 
     with(Dependencies.Kotlin) {
         implementation(stdLibJdk8)

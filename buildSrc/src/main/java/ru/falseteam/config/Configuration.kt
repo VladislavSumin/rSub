@@ -14,6 +14,7 @@ object Configuration {
             const val coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.2"
         }
 
+        const val ktorCio = "io.ktor:ktor-http-cio:${Versions.ktor}"
         const val ktorServer = "io.ktor:ktor-server-netty:${Versions.ktor}"
         const val ktorClient = "io.ktor:ktor-client-okhttp:${Versions.ktor}"
         const val ktorWebSocket = "io.ktor:ktor-websockets:${Versions.ktor}"
