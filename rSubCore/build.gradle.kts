@@ -18,6 +18,10 @@ dependencies {
         api(coroutines)
         api(serialization)
     }
+
+    with(Dependencies) {
+        api(slf4j)
+    }
 }
 
 tasks.withType<KotlinCompile> {

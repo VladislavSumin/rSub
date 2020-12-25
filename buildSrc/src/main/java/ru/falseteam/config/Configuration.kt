@@ -25,5 +25,6 @@ object Configuration {
         const val log4j2Api = "org.apache.logging.log4j:log4j-api:${Versions.log4j2}"
         const val log4j2Core = "org.apache.logging.log4j:log4j-core:${Versions.log4j2}"
         const val log4jSlf4jImpl = "org.apache.logging.log4j:log4j-slf4j-impl:2.9.0"
+        const val slf4j = "org.slf4j:slf4j-api:1.7.30"
     }
 }
