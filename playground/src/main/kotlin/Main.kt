@@ -10,45 +10,46 @@ import ru.falseteam.rsub.RSubClient
 import ru.falseteam.rsub.connector.ktorwebsocket.client.RSubConnectorKtorWebSocket
 import ru.falseteam.rsub.connector.ktorwebsocket.server.rSubWebSocket
 import ru.falseteam.rsub.server.RSubServer
-import kotlin.concurrent.thread
 
 fun main() {
     runClientSever()
 }
 
 private fun runClientSever() {
-    val srvThread = thread(name = "srv") { startServer() }
-    Thread.sleep(1000)
-    val clientThread = thread(name = "client") {
-        val client = createRSubClient()
-        runBlocking {
-            val job = launch {
-                client.observeConnection().collect {
-                    println("New status $it")
-                }
+    val server = startServer()
+    val httpClient = createHttpClient()
+    val rSubClient = createRSubClient(httpClient)
+
+    runBlocking {
+        val job = launch {
+            rSubClient.observeConnection().collect {
+                println("New status $it")
             }
-            delay(1000)
-            job.cancel()
         }
+        delay(1000)
+        job.cancel()
     }
 
-    srvThread.join()
-    clientThread.join()
+    httpClient.close()
+    server.stop(100L, 100L)
 }
 
-private fun startServer() {
+private fun startServer(): NettyApplicationEngine {
     val rSubServer = RSubServer()
-    embeddedServer(Netty, port = 8080) {
+    return embeddedServer(Netty, port = 8080) {
         install(io.ktor.websocket.WebSockets)
         routing {
             rSubWebSocket(rSubServer)
         }
-    }.start(true)
+    }.start(false)
 }
 
-private fun createRSubClient(): RSubClient {
-    val client = HttpClient {
+private fun createHttpClient(): HttpClient {
+    return HttpClient {
         install(WebSockets)
     }
+}
+
+private fun createRSubClient(client: HttpClient): RSubClient {
     return RSubClient(RSubConnectorKtorWebSocket(client))
 }
