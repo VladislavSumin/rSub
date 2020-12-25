@@ -11,6 +11,7 @@ object Configuration {
         object Kotlin {
             const val stdLibJdk8 = "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${Versions.kotlin}"
             const val reflect = "org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}"
+            const val coroutines = "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.2"
         }
 
         const val ktorServer = "io.ktor:ktor-server-netty:${Versions.ktor}"

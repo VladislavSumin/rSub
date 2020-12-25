@@ -1,12 +1,15 @@
-import ru.falseteam.rsub.RSub
+import kotlinx.coroutines.runBlocking
+import ru.falseteam.rsub.RSubOld
 import kotlin.concurrent.thread
 
 fun main() {
-createRSub()
+    createRSub()
 }
 
 private fun createRSub() {
-    RSub(listOf(TestInterfaceImpl()))
+    runBlocking {
+        RSubOld(listOf(TestInterfaceImpl())).getInterface<TestInterface>().testSimple()
+    }
 }
 
 private fun runClientSever() {

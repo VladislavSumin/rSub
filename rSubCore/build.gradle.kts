@@ -22,8 +22,9 @@ version = "0.1.0"
 
 dependencies {
     with(Dependencies.Kotlin) {
-        implementation(stdLibJdk8)
-        implementation(reflect)
+        api(stdLibJdk8)
+        api(reflect)
+        api(coroutines)
     }
     with(Dependencies) {
     }

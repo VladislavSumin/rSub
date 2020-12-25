@@ -4,5 +4,5 @@ import ru.falseteam.rsub.annotation.RSubInterface
 @RSubInterface
 interface TestInterface {
     @RSubFunction
-    fun testSimple(): String
+    suspend fun testSimple(): String
 }
