@@ -6,7 +6,7 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
-import ru.falseteam.rsub.RSubClient
+import ru.falseteam.rsub.client.RSubClient
 import ru.falseteam.rsub.connector.ktorwebsocket.client.RSubConnectorKtorWebSocket
 import ru.falseteam.rsub.connector.ktorwebsocket.server.rSubWebSocket
 import ru.falseteam.rsub.server.RSubServer

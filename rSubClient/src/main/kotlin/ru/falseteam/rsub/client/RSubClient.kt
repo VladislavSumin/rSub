@@ -1,7 +1,9 @@
-package ru.falseteam.rsub
+package ru.falseteam.rsub.client
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import ru.falseteam.rsub.RSub
+import ru.falseteam.rsub.RSubConnection
 
 class RSubClient(
     private val connector: RSubConnector
@@ -9,9 +11,9 @@ class RSubClient(
     private val connectionObservable = channelFlow {
         var connection: RSubConnection? = null
         try {
-            send(ConnectionStatus.DISCONNECTED)
+            send(RSubConnectionStatus.DISCONNECTED)
             connection = connector.connect()
-            send(ConnectionStatus.CONNECTED)
+            send(RSubConnectionStatus.CONNECTED)
             delay(5000)
             connection.close()
         } finally {
@@ -27,7 +29,3 @@ class RSubClient(
 }
 
 
-enum class ConnectionStatus {
-    CONNECTED,
-    DISCONNECTED,
-}

@@ -4,12 +4,8 @@ import io.ktor.client.*
 import io.ktor.client.features.websocket.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import io.ktor.http.cio.websocket.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
 import ru.falseteam.rsub.RSubConnection
-import ru.falseteam.rsub.RSubConnector
+import ru.falseteam.rsub.client.RSubConnector
 import ru.falseteam.rsub.connector.ktorwebsocket.core.RSubConnectionKtorWebSocket
 
 class RSubConnectorKtorWebSocket(
