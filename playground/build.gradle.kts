@@ -16,19 +16,12 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
-    implementation(project(":rSubClient"))
-    implementation(project(":rSubServer"))
-    implementation(project(":connectors:rSubKtorWebSocketConnectorCore"))
+    implementation(project(":connectors:rSubKtorWebSocketConnectorServer"))
+    implementation(project(":connectors:rSubKtorWebSocketConnectorClient"))
 
-    with(Dependencies.Kotlin) {
-        implementation(stdLibJdk8)
-        implementation(reflect)
-    }
     with(Dependencies) {
         implementation(ktorServer)
-        implementation(ktorWebSocket)
         implementation(ktorClient)
-        implementation(ktorClientWebSocket)
         implementation(ktorSerialization)
 
         implementation(log4j2Api)

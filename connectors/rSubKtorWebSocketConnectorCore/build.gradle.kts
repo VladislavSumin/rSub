@@ -14,7 +14,7 @@ java {
 dependencies {
     api(project(":rSubCore"))
     with(Dependencies) {
-        implementation(ktorCio)
+        api(ktorCio)
     }
 }
 

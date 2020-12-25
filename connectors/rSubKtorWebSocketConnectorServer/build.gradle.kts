@@ -12,17 +12,10 @@ java {
 }
 
 dependencies {
-    with(Dependencies.Kotlin) {
-        implementation(stdLibJdk8)
-        implementation(reflect)
-    }
+    api(project(":rSubServer"))
+    api(project(":connectors:rSubKtorWebSocketConnectorCore"))
     with(Dependencies) {
-        implementation(ktorServer)
-        implementation(ktorWebSocket)
-        implementation(ktorSerialization)
-
-        implementation(log4j2Api)
-        implementation(log4j2Core)
+        api(ktorWebSocket)
     }
 }
 
