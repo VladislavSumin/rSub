@@ -16,6 +16,7 @@ dependencies {
         api(stdLibJdk8)
         api(reflect)
         api(coroutines)
+        api(serialization)
     }
 }
 

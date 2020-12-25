@@ -20,17 +20,18 @@ private fun runClientSever() {
     val httpClient = createHttpClient()
     val rSubClient = createRSubClient(httpClient)
 
-    runBlocking {
+    GlobalScope.launch {
         val job = launch {
             rSubClient.observeConnection().collect {
                 println("New status $it")
             }
         }
         delay(1000)
-        job.cancel()
+//        job.cancel()
     }
 
-    httpClient.close()
+    Thread.sleep(3000)
+//    httpClient.close()
     server.stop(100L, 100L)
 }
 
