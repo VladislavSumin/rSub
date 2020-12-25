@@ -21,6 +21,8 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
+    implementation(project(":rSubCore"))
+
     with(Dependencies.Kotlin) {
         implementation(stdLibJdk8)
         implementation(reflect)

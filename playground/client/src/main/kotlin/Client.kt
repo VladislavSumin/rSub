@@ -14,11 +14,13 @@ fun startClient() {
     println("Client created")
 
     runBlocking {
-        client.webSocket(method = HttpMethod.Get, port = 8888, path = "/ws", request = {
+        val session = client.webSocketSession(method = HttpMethod.Get, port = 8888, path = "/ws") {
             this.setAttributes {
                 header(HttpHeaders.SecWebSocketProtocol, "rSub")
             }
-        }) {
+        }
+
+        with(session) {
             launch {
                 send(Frame.Text("Hello from client"))
             }

@@ -1,16 +1,15 @@
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import ru.falseteam.rsub.RSubOld
 import kotlin.concurrent.thread
+import kotlin.coroutines.coroutineContext
 
 fun main() {
-    createRSub()
+    runClientSever()
 }
 
-private fun createRSub() {
-    runBlocking {
-        RSubOld(listOf(TestInterfaceImpl())).getInterface<TestInterface>().testSimple()
-    }
-}
 
 private fun runClientSever() {
     val srvThread = thread(name = "srv") { startServer() }
