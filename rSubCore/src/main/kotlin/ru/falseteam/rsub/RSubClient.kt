@@ -6,15 +6,24 @@ import kotlinx.coroutines.flow.*
 class RSubClient(
     private val connector: RSubConnector
 ) : RSub() {
-    private val connectionObservable = flow {
-        emit(ConnectionStatus.DISCONNECTED)
-    }.shareIn(GlobalScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), 1)
+    private val connectionObservable = channelFlow {
+        var connection: RSubConnection? = null
+        try {
+            send(ConnectionStatus.DISCONNECTED)
+            connection = connector.connect()
+            send(ConnectionStatus.CONNECTED)
+            delay(5000)
+            connection.close()
+        } finally {
+            withContext(NonCancellable) {
+                connection?.close()
+            }
+        }
+    }
+        .distinctUntilChanged()
+        .shareIn(GlobalScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), 1)
 
     fun observeConnection() = connectionObservable
-}
-
-interface RSubConnector {
-    suspend fun connect(): RSubConnection
 }
 
 
