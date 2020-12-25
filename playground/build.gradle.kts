@@ -16,7 +16,8 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
-    implementation(project(":rSubCore"))
+    implementation(project(":rSubClient"))
+    implementation(project(":rSubServer"))
 
     with(Dependencies.Kotlin) {
         implementation(stdLibJdk8)

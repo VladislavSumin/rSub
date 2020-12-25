@@ -12,11 +12,7 @@ java {
 }
 
 dependencies {
-    with(Dependencies.Kotlin) {
-        api(stdLibJdk8)
-        api(reflect)
-        api(coroutines)
-    }
+    api(project(":rSubCore"))
 }
 
 tasks.withType<KotlinCompile> {
