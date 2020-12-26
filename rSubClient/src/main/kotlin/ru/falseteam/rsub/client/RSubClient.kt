@@ -9,6 +9,7 @@ import ru.falseteam.rsub.RSubMessage
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.net.SocketTimeoutException
+import kotlin.coroutines.Continuation
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.kotlinFunction
@@ -77,21 +78,38 @@ class RSubClient(
 
     private fun createNewProxy(name: String, kClass: KClass<*>) =
         Proxy.newProxyInstance(this::class.java.classLoader, arrayOf(kClass.java)) { _, method, arguments ->
-            processProxyCall(name, method, arguments)
+            return@newProxyInstance processProxyCall(name, method, arguments)
         }
 
-    private fun processProxyCall(name: String, method: Method, arguments: Array<Any>) {
+    private fun processProxyCall(name: String, method: Method, arguments: Array<Any>): Any? {
         val kMethod = method.kotlinFunction!!
-        if (kMethod.isSuspend) processSuspendFunction(name, kMethod, arguments)
+        return if (kMethod.isSuspend) processSuspendFunction(name, kMethod, arguments)
         else processNonSuspendFunction(name, kMethod, arguments)
     }
 
-    private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>) {
-        TODO("not implemented")
+    private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>): Any? {
+        val continuation = arguments.last() as Continuation<*>
+        val argumentsWithoutContinuation = arguments.take(arguments.size - 1)
+        return SuspendRemover.invoke(object : SuspendFunction {
+            override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
+        }, continuation)
+    }
+
+    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>): Any? {
+        delay(5000)
+        return "hello world"
     }
 
     private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>) {
         TODO("not implemented")
+    }
+
+    companion object {
+        private val SuspendRemover = SuspendFunction::class.java.methods[0]
+
+        private interface SuspendFunction {
+            suspend fun invoke(): Any?
+        }
     }
 
 //    class RSubProxyNameCollisionException(name: String, kClassRequest: KClass<*>, kClassProxy: KClass<*>) :
