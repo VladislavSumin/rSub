@@ -20,7 +20,11 @@ private fun runClientSever() {
     val httpClient = createHttpClient()
     val rSubClient = createRSubClient(httpClient)
 
+    val proxy = rSubClient.getProxy<TestInterface>()
+    val proxy2 = rSubClient.getProxy<TestInterface>()
+
     runBlocking {
+        proxy.testSimple()
         val job = launch {
             rSubClient.observeConnection().collect {
                 println("New status $it")
