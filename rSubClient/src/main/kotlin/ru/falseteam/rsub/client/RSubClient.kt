@@ -81,9 +81,9 @@ class RSubClient(
             return@newProxyInstance processProxyCall(name, method, arguments)
         }
 
-    private fun processProxyCall(name: String, method: Method, arguments: Array<Any>): Any? {
+    private fun processProxyCall(name: String, method: Method, arguments: Array<Any>?): Any? {
         val kMethod = method.kotlinFunction!!
-        return if (kMethod.isSuspend) processSuspendFunction(name, kMethod, arguments)
+        return if (kMethod.isSuspend) processSuspendFunction(name, kMethod, arguments!!)
         else processNonSuspendFunction(name, kMethod, arguments)
     }
 
@@ -95,13 +95,25 @@ class RSubClient(
         }, continuation)
     }
 
-    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>): Any? {
+    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>?): Any? {
         delay(5000)
         return "hello world"
     }
 
-    private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>) {
-        TODO("not implemented")
+    private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<*> {
+        if (method.returnType.classifier != Flow::class) {
+            throw Exception("For non suspend function only flow return type supported")
+        }
+        return processFlow(name, method, arguments)
+    }
+
+    private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<Any?> {
+        return flow<String> {
+            delay(1000)
+            emit("Hello 1")
+            delay(500)
+            emit("Hello 2")
+        }
     }
 
     companion object {
