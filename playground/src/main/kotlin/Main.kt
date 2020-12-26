@@ -29,6 +29,7 @@ private fun runClientSever() {
 //                println("New status $it")
 //            }
 //        }
+        launch { println(proxy.testSimple()) }
         println(proxy.testSimple())
     }
 

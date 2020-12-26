@@ -11,8 +11,8 @@ import ru.falseteam.rsub.RSubMessage
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.net.SocketTimeoutException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.Continuation
-import kotlin.coroutines.coroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.kotlinFunction
@@ -22,6 +22,7 @@ class RSubClient(
 ) : RSub() {
     private val log = LoggerFactory.getLogger("rSub.client")
     private val proxies = mutableMapOf<String, Any>()
+    private val nextId = AtomicInteger(0)
     private val connection = channelFlow {
         log.debug("Start observe connection")
         send(ConnectionState.Connecting)
@@ -108,12 +109,13 @@ class RSubClient(
         }.map { connection ->
             coroutineScope {
                 connection as ConnectionState.Connected
+                val id = nextId.getAndIncrement()
 
-                val responseDeferred = async { connection.incoming.filter { it.id == 0 }.first() }
+                val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
 
                 val request = RSubMessage(
-                    0,
-                    JsonPrimitive("Hello from server response")
+                    id,
+                    JsonPrimitive("Hello from server response id $id")
                 )
                 connection.send(request)
 
