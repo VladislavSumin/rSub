@@ -2,6 +2,8 @@ package ru.falseteam.rsub.client
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import ru.falseteam.rsub.RSub
 import ru.falseteam.rsub.RSubConnection
@@ -10,6 +12,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.net.SocketTimeoutException
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.coroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.jvm.kotlinFunction
@@ -19,19 +22,20 @@ class RSubClient(
 ) : RSub() {
     private val log = LoggerFactory.getLogger("rSub.client")
     private val proxies = mutableMapOf<String, Any>()
-    private val connectionObservable = channelFlow {
+    private val connection = channelFlow {
         log.debug("Start observe connection")
-        send(RSubConnectionStatus.DISCONNECTED)
+        send(ConnectionState.Connecting)
 
         var connection: RSubConnection? = null
         try {
             while (true) {
                 try {
                     connection = connector.connect()
-                    send(RSubConnectionStatus.CONNECTED)
-                    processInputMessages(connection.receive)
+                    val state = crateConnectedState(connection, this)
+                    send(state)
+                    state.incoming.count() // block current coroutine while connection running
                 } catch (e: SocketTimeoutException) {
-                    send(RSubConnectionStatus.DISCONNECTED)
+                    send(ConnectionState.Disconnected)
                     connection?.close()
                     delay(1000)
                 }
@@ -45,20 +49,19 @@ class RSubClient(
         }
     }
         .distinctUntilChanged()
-        .onEach { log.debug("New connection status: $it") }
+        .onEach { log.debug("New connection status: ${it.status}") }
         .shareIn(GlobalScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), 1)
 
-    fun observeConnection() = connectionObservable
-
-    private suspend fun processInputMessages(messages: Flow<String>) {
-        messages.collect { json ->
-            processInputMessage(RSubMessage.fromJson(json))
-        }
+    private fun crateConnectedState(connection: RSubConnection, scope: CoroutineScope): ConnectionState.Connected {
+        return ConnectionState.Connected(
+            { connection.send(it.toJson()) },
+            connection.receive
+                .map { RSubMessage.fromJson(it) }
+                .shareIn(scope, SharingStarted.Eagerly)
+        )
     }
 
-    private suspend fun processInputMessage(message: RSubMessage) {
-        println(message)
-    }
+    fun observeConnection(): Flow<RSubConnectionStatus> = connection.map { it.status }
 
     inline fun <reified T> getProxy(): T = getProxy(T::class)
 
@@ -96,8 +99,28 @@ class RSubClient(
     }
 
     private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>?): Any? {
-        delay(5000)
-        return "hello world"
+        return connection.filter {
+            when (it) {
+                is ConnectionState.Connecting -> false
+                is ConnectionState.Connected -> true
+                is ConnectionState.Disconnected -> throw Exception("Connection in state DISCONNECTED")//TODO make custom exception
+            }
+        }.map { connection ->
+            coroutineScope {
+                connection as ConnectionState.Connected
+
+                val responseDeferred = async { connection.incoming.filter { it.id == 0 }.first() }
+
+                val request = RSubMessage(
+                    0,
+                    JsonPrimitive("Hello from server response")
+                )
+                connection.send(request)
+
+                val response = responseDeferred.await()
+                response.payload.toString()
+            }
+        }.first()
     }
 
     private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<*> {
@@ -122,6 +145,16 @@ class RSubClient(
         private interface SuspendFunction {
             suspend fun invoke(): Any?
         }
+    }
+
+    private sealed class ConnectionState(val status: RSubConnectionStatus) {
+        object Connecting : ConnectionState(RSubConnectionStatus.CONNECTING)
+        class Connected(
+            val send: suspend (message: RSubMessage) -> Unit,
+            val incoming: Flow<RSubMessage>
+        ) : ConnectionState(RSubConnectionStatus.CONNECTED)
+
+        object Disconnected : ConnectionState(RSubConnectionStatus.DISCONNECTED)
     }
 
 //    class RSubProxyNameCollisionException(name: String, kClassRequest: KClass<*>, kClassProxy: KClass<*>) :

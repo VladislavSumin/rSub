@@ -24,21 +24,12 @@ private fun runClientSever() {
     val proxy2 = rSubClient.getProxy<TestInterface>()
 
     runBlocking {
-        proxy.testFlow().collect {
-            println(it)
-        }
-
-        val helloJob = launch {
-            println(proxy.testSimple())
-        }
-        val job = launch {
-            rSubClient.observeConnection().collect {
-                println("New status $it")
-            }
-        }
-        delay(1000)
-        helloJob.cancel()
-        job.cancel()
+//        val job = launch {
+//            rSubClient.observeConnection().collect {
+//                println("New status $it")
+//            }
+//        }
+        println(proxy.testSimple())
     }
 
     httpClient.close()
