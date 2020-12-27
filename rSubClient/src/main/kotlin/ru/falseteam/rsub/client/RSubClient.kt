@@ -3,7 +3,6 @@ package ru.falseteam.rsub.client
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
@@ -11,6 +10,7 @@ import ru.falseteam.rsub.RSub
 import ru.falseteam.rsub.RSubConnection
 import ru.falseteam.rsub.RSubMessage
 import ru.falseteam.rsub.RSubSubscribeMessage
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.net.SocketTimeoutException
@@ -97,9 +97,13 @@ class RSubClient(
     private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>): Any? {
         val continuation = arguments.last() as Continuation<*>
         val argumentsWithoutContinuation = arguments.take(arguments.size - 1)
-        return SuspendRemover.invoke(object : SuspendFunction {
-            override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
-        }, continuation)
+        return try {
+            SuspendRemover.invoke(object : SuspendFunction {
+                override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
+            }, continuation)
+        } catch (e: InvocationTargetException) {
+            throw e.targetException
+        }
     }
 
     private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>?): Any? {
@@ -109,21 +113,31 @@ class RSubClient(
                 is ConnectionState.Connected -> true
                 is ConnectionState.Disconnected -> throw Exception("Connection in state DISCONNECTED")//TODO make custom exception
             }
-        }.map { connection ->
-            coroutineScope {
-                connection as ConnectionState.Connected
+        }
+            .map { it as ConnectionState.Connected }
+            .map { connection ->
                 val id = nextId.getAndIncrement()
+                try {
+                    coroutineScope {
+                        val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
 
-                val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
+                        val request = getSubscribeMessage(id, name, method)
+                        connection.send(request)
 
-                val request = getSubscribeMessage(id, name, method)
-                connection.send(request)
+                        val response = responseDeferred.await()
 
-                val response = responseDeferred.await()
-
-                Json.decodeFromJsonElement(Json.serializersModule.serializer(method.returnType), response.payload)
-            }
-        }.first()
+                        Json.decodeFromJsonElement(
+                            Json.serializersModule.serializer(method.returnType),
+                            response.payload!!
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    withContext(NonCancellable) {
+                        connection.send(getUnsubscribeMessage(id))
+                    }
+                    throw e
+                }
+            }.first()
     }
 
     private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<*> {
@@ -170,6 +184,10 @@ class RSubClient(
             RSubMessage.Type.SUBSCRIBE,
             Json.encodeToJsonElement(payload)
         )
+    }
+
+    private fun getUnsubscribeMessage(id: Int): RSubMessage {
+        return RSubMessage(id, RSubMessage.Type.UNSUBSCRIBE)
     }
 
 //    class RSubProxyNameCollisionException(name: String, kClassRequest: KClass<*>, kClassProxy: KClass<*>) :

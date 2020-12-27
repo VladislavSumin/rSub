@@ -10,7 +10,7 @@ import kotlinx.serialization.json.JsonElement
 data class RSubMessage(
     val id: Int,
     val type: Type,
-    val payload: JsonElement
+    val payload: JsonElement? = null
 ) {
     companion object {
         private val mapper = Json
@@ -21,6 +21,7 @@ data class RSubMessage(
 
     enum class Type {
         SUBSCRIBE,
-        DATA
+        UNSUBSCRIBE,
+        DATA,
     }
 }
