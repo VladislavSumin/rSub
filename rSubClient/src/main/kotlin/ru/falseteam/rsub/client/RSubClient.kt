@@ -2,12 +2,15 @@ package ru.falseteam.rsub.client
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
 import ru.falseteam.rsub.RSub
 import ru.falseteam.rsub.RSubConnection
 import ru.falseteam.rsub.RSubMessage
+import ru.falseteam.rsub.RSubSubscribeMessage
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.net.SocketTimeoutException
@@ -113,14 +116,12 @@ class RSubClient(
 
                 val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
 
-                val request = RSubMessage(
-                    id,
-                    JsonPrimitive("Hello from server response id $id")
-                )
+                val request = getSubscribeMessage(id, name, method)
                 connection.send(request)
 
                 val response = responseDeferred.await()
-                response.payload.toString()
+
+                Json.decodeFromJsonElement(Json.serializersModule.serializer(method.returnType), response.payload)
             }
         }.first()
     }
@@ -157,6 +158,18 @@ class RSubClient(
         ) : ConnectionState(RSubConnectionStatus.CONNECTED)
 
         object Disconnected : ConnectionState(RSubConnectionStatus.DISCONNECTED)
+    }
+
+    private fun getSubscribeMessage(id: Int, name: String, method: KFunction<*>): RSubMessage {
+        val payload = RSubSubscribeMessage(
+            name,
+            method.name
+        )
+        return RSubMessage(
+            id,
+            RSubMessage.Type.SUBSCRIBE,
+            Json.encodeToJsonElement(payload)
+        )
     }
 
 //    class RSubProxyNameCollisionException(name: String, kClassRequest: KClass<*>, kClassProxy: KClass<*>) :

@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class RSubMessage(
     val id: Int,
-//    val type: Type,
+    val type: Type,
     val payload: JsonElement
 ) {
     companion object {
@@ -20,5 +20,7 @@ data class RSubMessage(
     fun toJson(): String = mapper.encodeToString(this)
 
     enum class Type {
+        SUBSCRIBE,
+        DATA
     }
 }

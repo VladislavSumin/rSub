@@ -6,10 +6,13 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
 import ru.falseteam.rsub.client.RSubClient
 import ru.falseteam.rsub.connector.ktorwebsocket.client.RSubConnectorKtorWebSocket
 import ru.falseteam.rsub.connector.ktorwebsocket.server.rSubWebSocket
 import ru.falseteam.rsub.server.RSubServer
+import kotlin.reflect.typeOf
 
 fun main() {
     runClientSever()
@@ -39,6 +42,7 @@ private fun runClientSever() {
 
 private fun startServer(): NettyApplicationEngine {
     val rSubServer = RSubServer()
+    rSubServer.registerImpl(TestInterfaceImpl(), "TestInterface")
     return embeddedServer(Netty, port = 8080) {
         install(io.ktor.websocket.WebSockets)
         routing {
