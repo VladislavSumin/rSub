@@ -23,5 +23,6 @@ data class RSubMessage(
         SUBSCRIBE,
         UNSUBSCRIBE,
         DATA,
+        ERROR,
     }
 }

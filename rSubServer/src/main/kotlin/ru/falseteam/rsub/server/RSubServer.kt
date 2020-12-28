@@ -60,8 +60,21 @@ class RSubServer : RSub() {
                 log.trace("Subscribe id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}")
                 val impl = impls[subscribeRequest.interfaceName]!!
                 val kFunction = impl::class.functions.find { it.name == subscribeRequest.functionName }!!
-                val response = suspendCoroutine<Any?> {
-                    it.resume(kFunction.call(impl, it))
+
+                val response = try {
+                    suspendCoroutine<Any?> {
+                        it.resume(kFunction.call(impl, it))
+                    }
+                } catch (e: Exception) {
+                    send(RSubMessage(request.id, RSubMessage.Type.ERROR))
+                    activeSubscriptions.remove(request.id)
+
+                    if (e is CancellationException) throw e
+                    log.trace(
+                        "Error on subscription id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}",
+                        e
+                    )
+                    return@launch
                 }
 
                 val responsePayload =

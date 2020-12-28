@@ -111,7 +111,7 @@ class RSubClient(
             when (it) {
                 is ConnectionState.Connecting -> false
                 is ConnectionState.Connected -> true
-                is ConnectionState.Disconnected -> throw Exception("Connection in state DISCONNECTED")//TODO make custom exception
+                is ConnectionState.Disconnected -> throw RSubException("Connection in state DISCONNECTED")
             }
         }
             .map { it as ConnectionState.Connected }
@@ -126,10 +126,16 @@ class RSubClient(
 
                         val response = responseDeferred.await()
 
-                        Json.decodeFromJsonElement(
-                            Json.serializersModule.serializer(method.returnType),
-                            response.payload!!
-                        )
+                        when (response.type) {
+                            RSubMessage.Type.DATA -> {
+                                Json.decodeFromJsonElement(
+                                    Json.serializersModule.serializer(method.returnType),
+                                    response.payload!!
+                                )
+                            }
+                            RSubMessage.Type.ERROR -> throw RSubException("Server return error")
+                            RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
+                        }
                     }
                 } catch (e: CancellationException) {
                     withContext(NonCancellable) {
