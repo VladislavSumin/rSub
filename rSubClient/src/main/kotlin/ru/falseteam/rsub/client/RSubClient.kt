@@ -24,8 +24,23 @@ class RSubClient(
     private val connector: RSubConnector
 ) : RSub() {
     private val log = LoggerFactory.getLogger("rSub.client")
-    private val proxies = mutableMapOf<String, Any>()
+
+    /**
+     * Contains currently existed proxies
+     * @key proxy name
+     * @value proxy original class and proxy object
+     */
+    private val proxies = mutableMapOf<String, Pair<KClass<*>, Any>>()
+
+    /**
+     * Contains next id, using to create new subscription with uncial id
+     */
     private val nextId = AtomicInteger(0)
+
+    /**
+     * This shared flow keeps the connection open and automatically reconnects in case of errors.
+     * The connection will be maintained as long as there are active subscriptions
+     */
     private val connection = channelFlow {
         log.debug("Start observe connection")
         send(ConnectionState.Connecting)
@@ -39,9 +54,11 @@ class RSubClient(
                     send(state)
                     state.incoming.count() // block current coroutine while connection running
                 } catch (e: SocketTimeoutException) {
+                    log.debug("Connection failed by socket exception: ${e.message}")
                     send(ConnectionState.Disconnected)
                     connection?.close()
                     delay(1000)
+                    log.debug("Reconnecting...")
                 }
             }
         } finally {
@@ -56,29 +73,66 @@ class RSubClient(
         .onEach { log.debug("New connection status: ${it.status}") }
         .shareIn(GlobalScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), 1)
 
+    /**
+     * Create wrapped connection, with shared receive flow
+     * all received messages reply to that flow, flow haven`t buffer!
+     *
+     * @param connection raw connection from connector
+     * @param scope coroutine scope of current connection session
+     */
     private fun crateConnectedState(connection: RSubConnection, scope: CoroutineScope): ConnectionState.Connected {
         return ConnectionState.Connected(
             { connection.send(it.toJson()) },
             connection.receive
                 .map { RSubMessage.fromJson(it) }
+                // Hot observable, subscribe immediately, shared, no buffer, connection scoped
                 .shareIn(scope, SharingStarted.Eagerly)
         )
     }
 
-    fun observeConnection(): Flow<RSubConnectionStatus> = connection.map { it.status }
+    /**
+     * Keep connection active while subscribed, return actual connection status
+     */
+    fun observeConnectionStatus(): Flow<RSubConnectionStatus> = connection.map { it.status }
+
+    /**
+     * Try to subscribe to [connection], wait connected state and execute given block with [ConnectionState.Connected]
+     * If connection failed throw [RSubException]
+     */
+    private suspend fun <T> withConnection(block: suspend (connection: ConnectionState.Connected) -> T): T {
+        return connection.filter {
+            when (it) {
+                is ConnectionState.Connecting -> false
+                is ConnectionState.Connected -> true
+                is ConnectionState.Disconnected -> throw RSubException("Connection in state DISCONNECTED")
+            }
+        }
+            .map { it as ConnectionState.Connected }
+            // Hack, use map to prevent closing connection.
+            // Connection subscription active all time while block executing.
+            .map(block)
+            .first()
+    }
 
     inline fun <reified T> getProxy(): T = getProxy(T::class)
 
     fun <T> getProxy(kClass: KClass<*>): T {
         val name = kClass.simpleName!!
+        @Suppress("UNCHECKED_CAST")
         return if (proxies.containsKey(name)) {
-            log.debug("Find proxy instance for name $name")
-            //TODO check proxy class to prevent name collision
-            proxies[name]!!
+            log.debug("Found proxy instance for name $name")
+            val pair = proxies[name]!!
+            if (kClass != pair.first) {
+                throw Exception(
+                    "Found proxies name collision, requestedProxy: ${kClass.qualifiedName}, " +
+                            "cached proxy: ${pair.first.qualifiedName}"
+                )
+            }
+            pair.second
         } else {
             log.debug("Creating new proxy for name $name")
             val proxy = createNewProxy(name, kClass)
-            proxies[name] = proxy
+            proxies[name] = Pair(kClass, proxy)
             proxy
         } as T
     }
@@ -107,43 +161,35 @@ class RSubClient(
     }
 
     private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>?): Any? {
-        return connection.filter {
-            when (it) {
-                is ConnectionState.Connecting -> false
-                is ConnectionState.Connected -> true
-                is ConnectionState.Disconnected -> throw RSubException("Connection in state DISCONNECTED")
+        return withConnection { connection ->
+            val id = nextId.getAndIncrement()
+            try {
+                coroutineScope {
+                    val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
+
+                    val request = getSubscribeMessage(id, name, method)
+                    connection.send(request)
+
+                    val response = responseDeferred.await()
+
+                    when (response.type) {
+                        RSubMessage.Type.DATA -> {
+                            Json.decodeFromJsonElement(
+                                Json.serializersModule.serializer(method.returnType),
+                                response.payload!!
+                            )
+                        }
+                        RSubMessage.Type.ERROR -> throw RSubException("Server return error")
+                        RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
+                    }
+                }
+            } catch (e: CancellationException) {
+                withContext(NonCancellable) {
+                    connection.send(getUnsubscribeMessage(id))
+                }
+                throw e
             }
         }
-            .map { it as ConnectionState.Connected }
-            .map { connection ->
-                val id = nextId.getAndIncrement()
-                try {
-                    coroutineScope {
-                        val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
-
-                        val request = getSubscribeMessage(id, name, method)
-                        connection.send(request)
-
-                        val response = responseDeferred.await()
-
-                        when (response.type) {
-                            RSubMessage.Type.DATA -> {
-                                Json.decodeFromJsonElement(
-                                    Json.serializersModule.serializer(method.returnType),
-                                    response.payload!!
-                                )
-                            }
-                            RSubMessage.Type.ERROR -> throw RSubException("Server return error")
-                            RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
-                        }
-                    }
-                } catch (e: CancellationException) {
-                    withContext(NonCancellable) {
-                        connection.send(getUnsubscribeMessage(id))
-                    }
-                    throw e
-                }
-            }.first()
     }
 
     private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<*> {
