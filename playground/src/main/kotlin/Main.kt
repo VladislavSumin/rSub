@@ -5,6 +5,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collect
 import ru.falseteam.rsub.client.RSubClient
 import ru.falseteam.rsub.connector.ktorwebsocket.client.RSubConnectorKtorWebSocket
 import ru.falseteam.rsub.connector.ktorwebsocket.server.rSubWebSocket
@@ -29,10 +30,15 @@ private fun runClientSever() {
 //                println("New status $it")
 //            }
 //        }
-            val job = launch { println(proxy.testSimple()) }
-            val job2 = launch { println(proxy.testSimple()) }
-            delay(2000)
-            job.cancel()
+
+            println(proxy.testSimple())
+            proxy.testFlow().collect {
+                println(it)
+            }
+//            val job = launch { println(proxy.testSimple()) }
+//            val job2 = launch { println(proxy.testSimple()) }
+//            delay(2000)
+//            job.cancel()
 //            delay(1000)
 //            job2.cancel()
         }

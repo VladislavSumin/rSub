@@ -5,7 +5,7 @@ import java.lang.RuntimeException
 
 class TestInterfaceImpl : TestInterface {
     override suspend fun testSimple(): String {
-        delay(6000)
+        delay(3000)
 //        throw RuntimeException("Whoooops!")
         return "Hello world"
     }

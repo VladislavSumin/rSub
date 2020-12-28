@@ -142,33 +142,35 @@ class RSubClient(
             return@newProxyInstance processProxyCall(name, method, arguments)
         }
 
-    private fun processProxyCall(name: String, method: Method, arguments: Array<Any>?): Any? {
+    private fun processProxyCall(name: String, method: Method, arguments: Array<Any?>?): Any? {
         val kMethod = method.kotlinFunction!!
         return if (kMethod.isSuspend) processSuspendFunction(name, kMethod, arguments!!)
         else processNonSuspendFunction(name, kMethod, arguments)
     }
 
-    private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>): Any? {
+    private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any?>): Any? {
         val continuation = arguments.last() as Continuation<*>
-        val argumentsWithoutContinuation = arguments.take(arguments.size - 1)
-        return try {
-            SuspendRemover.invoke(object : SuspendFunction {
-                override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
-            }, continuation)
-        } catch (e: InvocationTargetException) {
-            throw e.targetException
-        }
+        val argumentsWithoutContinuation = arguments.sliceArray(0 until arguments.size - 1)
+        return SuspendCaller(continuation, object : SuspendFunction {
+            override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
+        })
     }
 
-    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: List<Any>?): Any? {
+    private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<*> {
+        if (method.returnType.classifier != Flow::class) {
+            throw Exception("For non suspend function only flow return type supported")
+        }
+        return processFlow(name, method, arguments)
+    }
+
+    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: Array<Any?>): Any? {
         return withConnection { connection ->
             val id = nextId.getAndIncrement()
             try {
                 coroutineScope {
                     val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
 
-                    val request = getSubscribeMessage(id, name, method)
-                    connection.send(request)
+                    connection.subscribe(id, name, method, arguments)
 
                     val response = responseDeferred.await()
 
@@ -192,38 +194,24 @@ class RSubClient(
         }
     }
 
-    private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<*> {
-        if (method.returnType.classifier != Flow::class) {
-            throw Exception("For non suspend function only flow return type supported")
-        }
-        return processFlow(name, method, arguments)
-    }
-
-    private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any>?): Flow<Any?> {
-        return flow<String> {
-            delay(1000)
-            emit("Hello 1")
-            delay(500)
-            emit("Hello 2")
+    private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<Any?> {
+        return flow<Any?> {
+            withConnection {
+                delay(1000)
+                emit("Hello 1")
+                delay(500)
+                emit("Hello 2")
+            }
         }
     }
 
-    companion object {
-        private val SuspendRemover = SuspendFunction::class.java.methods[0]
-
-        private interface SuspendFunction {
-            suspend fun invoke(): Any?
-        }
-    }
-
-    private sealed class ConnectionState(val status: RSubConnectionStatus) {
-        object Connecting : ConnectionState(RSubConnectionStatus.CONNECTING)
-        class Connected(
-            val send: suspend (message: RSubMessage) -> Unit,
-            val incoming: Flow<RSubMessage>
-        ) : ConnectionState(RSubConnectionStatus.CONNECTED)
-
-        object Disconnected : ConnectionState(RSubConnectionStatus.DISCONNECTED)
+    private suspend fun ConnectionState.Connected.subscribe(
+        id: Int,
+        name: String,
+        method: KFunction<*>,
+        arguments: Array<Any?>?
+    ) {
+        send(getSubscribeMessage(id, name, method))
     }
 
     private fun getSubscribeMessage(id: Int, name: String, method: KFunction<*>): RSubMessage {
@@ -242,8 +230,30 @@ class RSubClient(
         return RSubMessage(id, RSubMessage.Type.UNSUBSCRIBE)
     }
 
-//    class RSubProxyNameCollisionException(name: String, kClassRequest: KClass<*>, kClassProxy: KClass<*>) :
-//        Exception("For name $name request proxy ${kClassRequest.qualifiedName!!}, but find in cache ${kClassProxy.qualifiedName!!}")
+    companion object {
+        private val SuspendCaller = { cont: Continuation<*>, obj: SuspendFunction ->
+            try {
+                SuspendRemover.invoke(obj, cont)
+            } catch (e: InvocationTargetException) {
+                throw e.targetException
+            }
+        }
+        private val SuspendRemover = SuspendFunction::class.java.methods[0]
+
+        private interface SuspendFunction {
+            suspend fun invoke(): Any?
+        }
+    }
+
+    private sealed class ConnectionState(val status: RSubConnectionStatus) {
+        object Connecting : ConnectionState(RSubConnectionStatus.CONNECTING)
+        class Connected(
+            val send: suspend (message: RSubMessage) -> Unit,
+            val incoming: Flow<RSubMessage>
+        ) : ConnectionState(RSubConnectionStatus.CONNECTED)
+
+        object Disconnected : ConnectionState(RSubConnectionStatus.DISCONNECTED)
+    }
 }
 
 
