@@ -2,14 +2,12 @@ package ru.falseteam.rsub.client
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
-import ru.falseteam.rsub.RSub
-import ru.falseteam.rsub.RSubConnection
-import ru.falseteam.rsub.RSubMessage
-import ru.falseteam.rsub.RSubSubscribeMessage
+import ru.falseteam.rsub.*
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
@@ -83,9 +81,9 @@ class RSubClient(
      */
     private fun crateConnectedState(connection: RSubConnection, scope: CoroutineScope): ConnectionState.Connected {
         return ConnectionState.Connected(
-            { connection.send(it.toJson()) },
+            { connection.send(Json.encodeToString(it)) },
             connection.receive
-                .map { RSubMessage.fromJson(it) }
+                .map { Json.decodeFromString<RSubMessage>(it) }
                 // Hot observable, subscribe immediately, shared, no buffer, connection scoped
                 .shareIn(scope, SharingStarted.Eagerly)
         )
@@ -215,16 +213,19 @@ class RSubClient(
     }
 
     private fun parseServerMessage(message: RSubMessage, castType: KType): Any? {
-        return when (message.type) {
-            RSubMessage.Type.DATA -> {
-                Json.decodeFromJsonElement(
-                    Json.serializersModule.serializer(castType),
-                    message.payload!!
-                )
+        return when (message) {
+            is RSubMessage.Data -> {
+                val data = message.data
+                if (data != null)
+                    Json.decodeFromJsonElement(
+                        Json.serializersModule.serializer(castType),
+                        data
+                    )
+                else null
             }
-            RSubMessage.Type.FLOW_COMPLETE -> throw FlowCompleted()
-            RSubMessage.Type.ERROR -> throw RSubException("Server return error")
-            RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
+            is RSubMessage.FlowComplete -> throw FlowCompleted()
+            is RSubMessage.Error -> throw RSubException("Server return error")
+            is RSubMessage.Subscribe, is RSubMessage.Unsubscribe -> throw RSubException("Unexpected server data")
         }
     }
 
@@ -234,28 +235,13 @@ class RSubClient(
         method: KFunction<*>,
         arguments: Array<Any?>?
     ) {
-        send(getSubscribeMessage(id, name, method.name))
+        send(RSubMessage.Subscribe(id, name, method.name))
     }
 
     private suspend fun ConnectionState.Connected.unsubscribe(id: Int) {
-        this.send(getUnsubscribeMessage(id))
+        this.send(RSubMessage.Unsubscribe(id))
     }
 
-    private fun getSubscribeMessage(id: Int, name: String, methodName: String): RSubMessage {
-        val payload = RSubSubscribeMessage(
-            name,
-            methodName
-        )
-        return RSubMessage(
-            id,
-            RSubMessage.Type.SUBSCRIBE,
-            Json.encodeToJsonElement(payload)
-        )
-    }
-
-    private fun getUnsubscribeMessage(id: Int): RSubMessage {
-        return RSubMessage(id, RSubMessage.Type.UNSUBSCRIBE)
-    }
 
     companion object {
         private val SuspendCaller = { cont: Continuation<*>, obj: SuspendFunction ->

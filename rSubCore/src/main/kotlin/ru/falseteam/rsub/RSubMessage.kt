@@ -1,29 +1,30 @@
 package ru.falseteam.rsub
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
-data class RSubMessage(
-    val id: Int,
-    val type: Type,
-    val payload: JsonElement? = null
-) {
-    companion object {
-        private val mapper = Json
-        fun fromJson(json: String): RSubMessage = mapper.decodeFromString(json)
-    }
+sealed class RSubMessage {
+    abstract val id: Int
 
-    fun toJson(): String = mapper.encodeToString(this)
+    @Serializable
+    @SerialName("subscribe")
+    data class Subscribe(override val id: Int, val interfaceName: String, val functionName: String) : RSubMessage()
 
-    enum class Type {
-        SUBSCRIBE,
-        UNSUBSCRIBE,
-        DATA,
-        FLOW_COMPLETE,
-        ERROR,
-    }
+    @Serializable
+    @SerialName("unsubscribe")
+    data class Unsubscribe(override val id: Int) : RSubMessage()
+
+    @Serializable
+    @SerialName("data")
+    data class Data(override val id: Int, val data: JsonElement? = null) : RSubMessage()
+
+    @Serializable
+    @SerialName("flow_complete")
+    data class FlowComplete(override val id: Int) : RSubMessage()
+
+    @Serializable
+    @SerialName("error")
+    data class Error(override val id: Int) : RSubMessage()
 }

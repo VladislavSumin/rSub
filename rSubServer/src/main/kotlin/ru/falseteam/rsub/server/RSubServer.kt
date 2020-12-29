@@ -3,14 +3,14 @@ package ru.falseteam.rsub.server
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
 import ru.falseteam.rsub.RSub
 import ru.falseteam.rsub.RSubConnection
 import ru.falseteam.rsub.RSubMessage
-import ru.falseteam.rsub.RSubSubscribeMessage
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.reflect.KType
@@ -38,10 +38,12 @@ class RSubServer : RSub() {
             coroutineScope {
                 log.debug("Handle new connection")
                 connection.receive.collect {
-                    val request = RSubMessage.fromJson(it)
-                    when (request.type) {
-                        RSubMessage.Type.SUBSCRIBE -> processSubscribe(request, this)
-                        RSubMessage.Type.UNSUBSCRIBE -> processUnsubscribe(request)
+                    when (val request = Json.decodeFromString<RSubMessage>(it)) {
+                        is RSubMessage.Subscribe -> processSubscribe(request, this)
+                        is RSubMessage.Unsubscribe -> processUnsubscribe(request)
+                        else -> {
+                            // TODO!!
+                        }
                     }
                 }
                 activeSubscriptions.forEach { (_, v) -> v.cancel() }
@@ -50,18 +52,17 @@ class RSubServer : RSub() {
         }
 
         private suspend fun send(message: RSubMessage) {
-            connection.send(message.toJson())
+            connection.send(Json.encodeToString(message))
         }
 
         //TODO check possible data corrupt on id error from client (add sync?)
         //TODO add error handling
         //TODO make cancelable
-        private suspend fun processSubscribe(request: RSubMessage, scope: CoroutineScope) {
+        private suspend fun processSubscribe(request: RSubMessage.Subscribe, scope: CoroutineScope) {
             val job = scope.launch(start = CoroutineStart.LAZY) {
-                val subscribeRequest = Json.decodeFromJsonElement<RSubSubscribeMessage>(request.payload!!)
-                log.trace("Subscribe id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}")
-                val impl = impls[subscribeRequest.interfaceName]!!
-                val kFunction = impl::class.functions.find { it.name == subscribeRequest.functionName }!!
+                log.trace("Subscribe id=${request.id} to ${request.interfaceName}::${request.functionName}")
+                val impl = impls[request.interfaceName]!!
+                val kFunction = impl::class.functions.find { it.name == request.functionName }!!
 
                 try {
                     if (kFunction.isSuspend) {
@@ -74,22 +75,22 @@ class RSubServer : RSub() {
                         flow.collect {
                             sendData(request.id, kFunction.returnType.arguments[0].type!!, it)
                         }
-                        sendComplete(request.id)
+                        send(RSubMessage.FlowComplete(request.id))
                     }
                 } catch (e: Exception) {
-                    send(RSubMessage(request.id, RSubMessage.Type.ERROR))
+                    send(RSubMessage.Error(request.id))
                     activeSubscriptions.remove(request.id)
 
                     if (e is CancellationException) throw e
                     log.trace(
-                        "Error on subscription id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}",
+                        "Error on subscription id=${request.id} to ${request.interfaceName}::${request.functionName}",
                         e
                     )
                     return@launch
                 }
 
 
-                log.trace("Complete subscription id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}")
+                log.trace("Complete subscription id=${request.id} to ${request.interfaceName}::${request.functionName}")
                 activeSubscriptions.remove(request.id)
             }
             activeSubscriptions[request.id] = job
@@ -107,20 +108,12 @@ class RSubServer : RSub() {
                     Json.serializersModule.serializer(type),
                     data
                 )
-            val message = RSubMessage(
+            val message = RSubMessage.Data(
                 id,
-                RSubMessage.Type.DATA,
                 responsePayload
             )
             send(message)
         }
 
-        private suspend fun sendComplete(id: Int) {
-            val message = RSubMessage(
-                id,
-                RSubMessage.Type.FLOW_COMPLETE
-            )
-            send(message)
-        }
     }
 }
