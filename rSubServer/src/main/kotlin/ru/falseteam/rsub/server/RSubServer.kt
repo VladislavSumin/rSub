@@ -1,6 +1,7 @@
 package ru.falseteam.rsub.server
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -62,9 +63,18 @@ class RSubServer : RSub() {
                 val impl = impls[subscribeRequest.interfaceName]!!
                 val kFunction = impl::class.functions.find { it.name == subscribeRequest.functionName }!!
 
-                val response = try {
-                    suspendCoroutine<Any?> {
-                        it.resume(kFunction.call(impl, it))
+                try {
+                    if (kFunction.isSuspend) {
+                        val response = suspendCoroutine<Any?> {
+                            it.resume(kFunction.call(impl, it))
+                        }
+                        sendData(request.id, kFunction.returnType, response)
+                    } else {
+                        val flow = kFunction.call(impl) as Flow<*>
+                        flow.collect {
+                            sendData(request.id, kFunction.returnType.arguments[0].type!!, it)
+                        }
+                        sendComplete(request.id)
                     }
                 } catch (e: Exception) {
                     send(RSubMessage(request.id, RSubMessage.Type.ERROR))
@@ -78,7 +88,6 @@ class RSubServer : RSub() {
                     return@launch
                 }
 
-                sendData(request.id, kFunction.returnType, response)
 
                 log.trace("Complete subscription id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}")
                 activeSubscriptions.remove(request.id)
@@ -102,6 +111,14 @@ class RSubServer : RSub() {
                 id,
                 RSubMessage.Type.DATA,
                 responsePayload
+            )
+            send(message)
+        }
+
+        private suspend fun sendComplete(id: Int) {
+            val message = RSubMessage(
+                id,
+                RSubMessage.Type.FLOW_COMPLETE
             )
             send(message)
         }

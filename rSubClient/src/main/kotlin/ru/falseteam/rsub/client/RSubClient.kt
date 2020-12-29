@@ -187,7 +187,7 @@ class RSubClient(
     }
 
     private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<Any?> {
-        return flow<Any?> {
+        return channelFlow<Any?> {
             withConnection { connection ->
                 val id = nextId.getAndIncrement()
                 try {
@@ -197,7 +197,7 @@ class RSubClient(
                                 .filter { it.id == id }
                                 .collect {
                                     val item = parseServerMessage(it, method.returnType.arguments[0].type!!)
-                                    emit(item)
+                                    send(item)
                                 }
                         }
                         connection.subscribe(id, name, method, arguments)
