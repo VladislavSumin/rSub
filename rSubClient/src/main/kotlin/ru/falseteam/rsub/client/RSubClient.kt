@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.Continuation
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.KType
 import kotlin.reflect.jvm.kotlinFunction
 
 class RSubClient(
@@ -174,20 +175,11 @@ class RSubClient(
 
                     val response = responseDeferred.await()
 
-                    when (response.type) {
-                        RSubMessage.Type.DATA -> {
-                            Json.decodeFromJsonElement(
-                                Json.serializersModule.serializer(method.returnType),
-                                response.payload!!
-                            )
-                        }
-                        RSubMessage.Type.ERROR -> throw RSubException("Server return error")
-                        RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
-                    }
+                    parseServerMessage(response, method.returnType)
                 }
-            } catch (e: CancellationException) {
+            } catch (e: Exception) {
                 withContext(NonCancellable) {
-                    connection.send(getUnsubscribeMessage(id))
+                    connection.unsubscribe(id)
                 }
                 throw e
             }
@@ -196,12 +188,43 @@ class RSubClient(
 
     private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<Any?> {
         return flow<Any?> {
-            withConnection {
-                delay(1000)
-                emit("Hello 1")
-                delay(500)
-                emit("Hello 2")
+            withConnection { connection ->
+                val id = nextId.getAndIncrement()
+                try {
+                    coroutineScope {
+                        launch {
+                            connection.incoming
+                                .filter { it.id == id }
+                                .collect {
+                                    val item = parseServerMessage(it, method.returnType.arguments[0].type!!)
+                                    emit(item)
+                                }
+                        }
+                        connection.subscribe(id, name, method, arguments)
+                    }
+                } catch (e: FlowCompleted) {
+                    // suppress
+                } catch (e: Exception) {
+                    withContext(NonCancellable) {
+                        connection.unsubscribe(id)
+                    }
+                    throw e
+                }
             }
+        }
+    }
+
+    private fun parseServerMessage(message: RSubMessage, castType: KType): Any? {
+        return when (message.type) {
+            RSubMessage.Type.DATA -> {
+                Json.decodeFromJsonElement(
+                    Json.serializersModule.serializer(castType),
+                    message.payload!!
+                )
+            }
+            RSubMessage.Type.FLOW_COMPLETE -> throw FlowCompleted()
+            RSubMessage.Type.ERROR -> throw RSubException("Server return error")
+            RSubMessage.Type.SUBSCRIBE, RSubMessage.Type.UNSUBSCRIBE -> throw RSubException("Unexpected server data")
         }
     }
 
@@ -211,13 +234,17 @@ class RSubClient(
         method: KFunction<*>,
         arguments: Array<Any?>?
     ) {
-        send(getSubscribeMessage(id, name, method))
+        send(getSubscribeMessage(id, name, method.name))
     }
 
-    private fun getSubscribeMessage(id: Int, name: String, method: KFunction<*>): RSubMessage {
+    private suspend fun ConnectionState.Connected.unsubscribe(id: Int) {
+        this.send(getUnsubscribeMessage(id))
+    }
+
+    private fun getSubscribeMessage(id: Int, name: String, methodName: String): RSubMessage {
         val payload = RSubSubscribeMessage(
             name,
-            method.name
+            methodName
         )
         return RSubMessage(
             id,
@@ -254,6 +281,8 @@ class RSubClient(
 
         object Disconnected : ConnectionState(RSubConnectionStatus.DISCONNECTED)
     }
+
+    private class FlowCompleted : Exception()
 }
 
 

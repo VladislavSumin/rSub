@@ -23,6 +23,7 @@ data class RSubMessage(
         SUBSCRIBE,
         UNSUBSCRIBE,
         DATA,
+        FLOW_COMPLETE,
         ERROR,
     }
 }

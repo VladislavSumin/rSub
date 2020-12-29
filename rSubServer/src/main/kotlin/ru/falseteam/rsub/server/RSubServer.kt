@@ -12,6 +12,7 @@ import ru.falseteam.rsub.RSubMessage
 import ru.falseteam.rsub.RSubSubscribeMessage
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.reflect.KType
 import kotlin.reflect.full.functions
 
 class RSubServer : RSub() {
@@ -77,19 +78,7 @@ class RSubServer : RSub() {
                     return@launch
                 }
 
-                val responsePayload =
-                    Json.encodeToJsonElement(
-                        Json.serializersModule.serializer(kFunction.returnType),
-                        response!!
-                    )
-
-                send(
-                    RSubMessage(
-                        request.id,
-                        RSubMessage.Type.DATA,
-                        responsePayload
-                    )
-                )
+                sendData(request.id, kFunction.returnType, response)
 
                 log.trace("Complete subscription id=${request.id} to ${subscribeRequest.interfaceName}::${subscribeRequest.functionName}")
                 activeSubscriptions.remove(request.id)
@@ -101,6 +90,20 @@ class RSubServer : RSub() {
         private fun processUnsubscribe(request: RSubMessage) {
             log.trace("Cancel subscription id=${request.id}")
             activeSubscriptions.remove(request.id)?.cancel()
+        }
+
+        private suspend fun sendData(id: Int, type: KType, data: Any?) {
+            val responsePayload =
+                Json.encodeToJsonElement(
+                    Json.serializersModule.serializer(type),
+                    data
+                )
+            val message = RSubMessage(
+                id,
+                RSubMessage.Type.DATA,
+                responsePayload
+            )
+            send(message)
         }
     }
 }

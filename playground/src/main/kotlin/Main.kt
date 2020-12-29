@@ -32,9 +32,11 @@ private fun runClientSever() {
 //        }
 
             println(proxy.testSimple())
+            delay(100)
             proxy.testFlow().collect {
                 println(it)
             }
+
 //            val job = launch { println(proxy.testSimple()) }
 //            val job2 = launch { println(proxy.testSimple()) }
 //            delay(2000)
