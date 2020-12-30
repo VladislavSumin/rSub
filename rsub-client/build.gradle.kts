@@ -1,9 +1,8 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-import ru.falseteam.config.Configuration.Dependencies
 
 plugins {
-    kotlin("jvm") version ru.falseteam.config.Configuration.Versions.kotlin
-    kotlin("plugin.serialization") version ru.falseteam.config.Configuration.Versions.kotlin
+    kotlin("jvm") version ru.falseteam.config.RSubConfiguration.Versions.kotlin
+    kotlin("plugin.serialization") version ru.falseteam.config.RSubConfiguration.Versions.kotlin
 }
 
 java {

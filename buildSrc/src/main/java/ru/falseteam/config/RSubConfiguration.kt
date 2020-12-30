@@ -1,6 +1,6 @@
 package ru.falseteam.config
 
-object Configuration {
+object RSubConfiguration {
     object Versions {
         const val kotlin = "1.4.20"
         const val ktor = "1.5.0"
