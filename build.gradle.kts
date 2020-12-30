@@ -1,7 +1,7 @@
-group = "org.example"
-version = "1.0-SNAPSHOT"
+allprojects {
+    group = "ru.falseteam.rsub"
+    version = "1.0.0"
 
-subprojects {
     repositories {
         mavenCentral()
         jcenter()
