@@ -16,8 +16,8 @@ group = "ru.falseteam.myhome"
 version = "0.1.0"
 
 dependencies {
-    implementation(project(":connectors:rSubKtorWebSocketConnectorServer"))
-    implementation(project(":connectors:rSubKtorWebSocketConnectorClient"))
+    implementation(project(":connectors:rsub-ktor-websocket-connector-server"))
+    implementation(project(":connectors:rsub-ktor-websocket-connector-client"))
 
     with(Dependencies) {
         implementation(ktorServer)

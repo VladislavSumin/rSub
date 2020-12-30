@@ -12,10 +12,9 @@ java {
 }
 
 dependencies {
-    api(project(":rSubServer"))
-    api(project(":connectors:rSubKtorWebSocketConnectorCore"))
+    api(project(":rsub-core"))
     with(Dependencies) {
-        api(ktorWebSocket)
+        api(ktorCio)
     }
 }
 

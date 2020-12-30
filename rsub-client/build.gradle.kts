@@ -12,7 +12,7 @@ java {
 }
 
 dependencies {
-    api(project(":rSubCore"))
+    api(project(":rsub-core"))
 }
 
 tasks.withType<KotlinCompile> {

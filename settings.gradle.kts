@@ -1,13 +1,13 @@
 rootProject.name = "rSub"
 
 include(
-    ":rSubCore",
-    ":rSubServer",
-    ":rSubClient",
+    ":rsub-core",
+    ":rsub-server",
+    ":rsub-client",
 
-    ":connectors:rSubKtorWebSocketConnectorCore",
-    ":connectors:rSubKtorWebSocketConnectorServer",
-    ":connectors:rSubKtorWebSocketConnectorClient",
+    ":connectors:rsub-ktor-websocket-connector-core",
+    ":connectors:rsub-ktor-websocket-connector-server",
+    ":connectors:rsub-ktor-websocket-connector-client",
 
     ":playground"
 )
