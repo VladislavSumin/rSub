@@ -10,24 +10,34 @@ import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
 import ru.falseteam.rsub.RSub
 import ru.falseteam.rsub.RSubConnection
+import ru.falseteam.rsub.RSubInterface
 import ru.falseteam.rsub.RSubMessage
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.reflect.KClass
 import kotlin.reflect.KType
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.full.functions
+import kotlin.reflect.full.hasAnnotation
+import kotlin.reflect.full.superclasses
 
 class RSubServer : RSub() {
     private val log = LoggerFactory.getLogger("rSub.server")
-    private val impls = mutableMapOf<String, Any>()
+    private val impls = mutableMapOf<String, Pair<KClass<*>, Any>>()
 
     suspend fun handleNewConnection(connection: RSubConnection): Unit = coroutineScope {
         ConnectionHandler(connection).handle()
     }
 
-    //TODO name auto
-    fun registerImpl(impl: Any, name: String) {
-        impls[name] = impl
+    fun registerImpl(impl: Any) {
+        val rSubInterface = impl::class.superclasses.find { it.hasAnnotation<RSubInterface>() }
+            ?: throw Exception("impl must be subtype of interface with @RSubInterface annotation")
+
+        val name = rSubInterface.findAnnotation<RSubInterface>()!!.name
+
+        impls[name] = Pair(rSubInterface, impl)
     }
+
 
     private inner class ConnectionHandler(
         private val connection: RSubConnection
@@ -61,17 +71,18 @@ class RSubServer : RSub() {
         private suspend fun processSubscribe(request: RSubMessage.Subscribe, scope: CoroutineScope) {
             val job = scope.launch(start = CoroutineStart.LAZY) {
                 log.trace("Subscribe id=${request.id} to ${request.interfaceName}::${request.functionName}")
-                val impl = impls[request.interfaceName]!!
-                val kFunction = impl::class.functions.find { it.name == request.functionName }!!
+                val rSubInterface = impls[request.interfaceName]!!.first
+                val instance = impls[request.interfaceName]!!.second
+                val kFunction = rSubInterface.functions.find { it.name == request.functionName }!!
 
                 try {
                     if (kFunction.isSuspend) {
                         val response = suspendCoroutine<Any?> {
-                            it.resume(kFunction.call(impl, it))
+                            it.resume(kFunction.call(instance, it))
                         }
                         sendData(request.id, kFunction.returnType, response)
                     } else {
-                        val flow = kFunction.call(impl) as Flow<*>
+                        val flow = kFunction.call(instance) as Flow<*>
                         flow.collect {
                             sendData(request.id, kFunction.returnType.arguments[0].type!!, it)
                         }

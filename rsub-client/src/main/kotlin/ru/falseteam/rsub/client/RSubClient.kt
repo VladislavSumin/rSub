@@ -17,6 +17,7 @@ import kotlin.coroutines.Continuation
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KType
+import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.jvm.kotlinFunction
 
 class RSubClient(
@@ -116,7 +117,9 @@ class RSubClient(
     inline fun <reified T> getProxy(): T = getProxy(T::class)
 
     fun <T> getProxy(kClass: KClass<*>): T {
-        val name = kClass.simpleName!!
+        val annotation = kClass.findAnnotation<RSubInterface>()
+            ?: throw Exception("Proxy interface must have @RSubInterface annotation")
+        val name = annotation.name
         @Suppress("UNCHECKED_CAST")
         return if (proxies.containsKey(name)) {
             log.debug("Found proxy instance for name $name")
