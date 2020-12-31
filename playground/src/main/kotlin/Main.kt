@@ -16,7 +16,7 @@ fun main() {
 }
 
 private fun runClientSever() {
-    val server = startServer()
+//    val server = startServer()
     val httpClient = createHttpClient()
     val rSubClient = createRSubClient(httpClient)
 
@@ -47,7 +47,7 @@ private fun runClientSever() {
     }
 
     httpClient.close()
-    server.stop(100L, 100L)
+//    server.stop(100L, 100L)
 }
 
 private fun startServer(): NettyApplicationEngine {
