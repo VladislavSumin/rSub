@@ -114,9 +114,9 @@ class RSubClient(
             .first()
     }
 
-    inline fun <reified T> getProxy(): T = getProxy(T::class)
+    inline fun <reified T:Any> getProxy(): T = getProxy(T::class)
 
-    fun <T> getProxy(kClass: KClass<*>): T {
+    fun <T:Any> getProxy(kClass: KClass<T>): T {
         val annotation = kClass.findAnnotation<RSubInterface>()
             ?: throw Exception("Proxy interface must have @RSubInterface annotation")
         val name = annotation.name
