@@ -11,7 +11,7 @@ import ru.falseteam.rsub.*
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
-import java.net.ConnectException
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.Continuation
@@ -58,14 +58,19 @@ class RSubClient(
                     }
                 } catch (e: Exception) {
                     when (e) {
-                        is SocketTimeoutException, is ConnectException -> {
+                        is SocketTimeoutException,
+                        is SocketException -> {
                             log.debug("Connection failed by socket exception: ${e.message}")
                             send(ConnectionState.Disconnected)
                             connectionGlobal?.close()
                             delay(1000)
                             log.debug("Reconnecting...")
                         }
-                        else -> throw e
+                        is CancellationException -> throw e
+                        else -> {
+                            log.error("Unknown exception on connection", e)
+                            throw e
+                        }
                     }
                 }
             }
