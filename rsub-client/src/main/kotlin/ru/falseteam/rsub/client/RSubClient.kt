@@ -11,6 +11,7 @@ import ru.falseteam.rsub.*
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.Continuation
@@ -45,26 +46,33 @@ class RSubClient(
         log.debug("Start observe connection")
         send(ConnectionState.Connecting)
 
-        var connection: RSubConnection? = null
+        var connectionGlobal: RSubConnection? = null
         try {
             while (true) {
                 try {
-                    connection = connector.connect()
-                    val state = crateConnectedState(connection, this)
-                    send(state)
-                    state.incoming.count() // block current coroutine while connection running
-                } catch (e: SocketTimeoutException) {
-                    log.debug("Connection failed by socket exception: ${e.message}")
-                    send(ConnectionState.Disconnected)
-                    connection?.close()
-                    delay(1000)
-                    log.debug("Reconnecting...")
+                    coroutineScope {
+                        val connection = connector.connect()
+                        connectionGlobal = connection
+                        val state = crateConnectedState(connection, this)
+                        send(state)
+                    }
+                } catch (e: Exception) {
+                    when (e) {
+                        is SocketTimeoutException, is ConnectException -> {
+                            log.debug("Connection failed by socket exception: ${e.message}")
+                            send(ConnectionState.Disconnected)
+                            connectionGlobal?.close()
+                            delay(1000)
+                            log.debug("Reconnecting...")
+                        }
+                        else -> throw e
+                    }
                 }
             }
         } finally {
             log.debug("Stopping observe connection")
             withContext(NonCancellable) {
-                connection?.close()
+                connectionGlobal?.close()
                 log.debug("Stop observe connection")
             }
         }
@@ -80,7 +88,10 @@ class RSubClient(
      * @param connection raw connection from connector
      * @param scope coroutine scope of current connection session
      */
-    private fun crateConnectedState(connection: RSubConnection, scope: CoroutineScope): ConnectionState.Connected {
+    private fun crateConnectedState(
+        connection: RSubConnection,
+        scope: CoroutineScope
+    ): ConnectionState.Connected {
         return ConnectionState.Connected(
             { connection.send(Json.encodeToString(it)) },
             connection.receive
@@ -99,24 +110,29 @@ class RSubClient(
      * Try to subscribe to [connection], wait connected state and execute given block with [ConnectionState.Connected]
      * If connection failed throw [RSubException]
      */
-    private suspend fun <T> withConnection(block: suspend (connection: ConnectionState.Connected) -> T): T {
+    private suspend fun <T> withConnection(
+        throwOnDisconnect: Boolean = true,
+        block: suspend (connection: ConnectionState.Connected) -> T
+    ): T {
         return connection.filter {
             when (it) {
                 is ConnectionState.Connecting -> false
                 is ConnectionState.Connected -> true
-                is ConnectionState.Disconnected -> throw RSubException("Connection in state DISCONNECTED")
+                is ConnectionState.Disconnected ->
+                    if (throwOnDisconnect) throw RSubException("Connection in state DISCONNECTED")
+                    else false
             }
         }
             .map { it as ConnectionState.Connected }
             // Hack, use map to prevent closing connection.
             // Connection subscription active all time while block executing.
-            .map(block)
+            .mapLatest(block)
             .first()
     }
 
-    inline fun <reified T:Any> getProxy(): T = getProxy(T::class)
+    inline fun <reified T : Any> getProxy(): T = getProxy(T::class)
 
-    fun <T:Any> getProxy(kClass: KClass<T>): T {
+    fun <T : Any> getProxy(kClass: KClass<T>): T {
         val annotation = kClass.findAnnotation<RSubInterface>()
             ?: throw Exception("Proxy interface must have @RSubInterface annotation")
         val name = annotation.name
@@ -140,7 +156,10 @@ class RSubClient(
     }
 
     private fun createNewProxy(name: String, kClass: KClass<*>) =
-        Proxy.newProxyInstance(this::class.java.classLoader, arrayOf(kClass.java)) { _, method, arguments ->
+        Proxy.newProxyInstance(
+            this::class.java.classLoader,
+            arrayOf(kClass.java)
+        ) { _, method, arguments ->
             return@newProxyInstance processProxyCall(name, method, arguments)
         }
 
@@ -150,27 +169,41 @@ class RSubClient(
         else processNonSuspendFunction(name, kMethod, arguments)
     }
 
-    private fun processSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any?>): Any? {
+    private fun processSuspendFunction(
+        name: String,
+        method: KFunction<*>,
+        arguments: Array<Any?>
+    ): Any? {
         val continuation = arguments.last() as Continuation<*>
         val argumentsWithoutContinuation = arguments.sliceArray(0 until arguments.size - 1)
         return SuspendCaller(continuation, object : SuspendFunction {
-            override suspend fun invoke(): Any? = processSuspend(name, method, argumentsWithoutContinuation)
+            override suspend fun invoke(): Any? =
+                processSuspend(name, method, argumentsWithoutContinuation)
         })
     }
 
-    private fun processNonSuspendFunction(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<*> {
+    private fun processNonSuspendFunction(
+        name: String,
+        method: KFunction<*>,
+        arguments: Array<Any?>?
+    ): Flow<*> {
         if (method.returnType.classifier != Flow::class) {
             throw Exception("For non suspend function only flow return type supported")
         }
         return processFlow(name, method, arguments)
     }
 
-    private suspend fun processSuspend(name: String, method: KFunction<*>, arguments: Array<Any?>): Any? {
+    private suspend fun processSuspend(
+        name: String,
+        method: KFunction<*>,
+        arguments: Array<Any?>
+    ): Any? {
         return withConnection { connection ->
             val id = nextId.getAndIncrement()
             try {
                 coroutineScope {
-                    val responseDeferred = async { connection.incoming.filter { it.id == id }.first() }
+                    val responseDeferred =
+                        async { connection.incoming.filter { it.id == id }.first() }
 
                     connection.subscribe(id, name, method, arguments)
 
@@ -187,33 +220,39 @@ class RSubClient(
         }
     }
 
-    private fun processFlow(name: String, method: KFunction<*>, arguments: Array<Any?>?): Flow<Any?> {
-        return channelFlow<Any?> {
-            withConnection { connection ->
-                val id = nextId.getAndIncrement()
-                try {
-                    coroutineScope {
-                        launch {
-                            connection.incoming
-                                .filter { it.id == id }
-                                .collect {
-                                    val item = parseServerMessage(it, method.returnType.arguments[0].type!!)
-                                    send(item)
-                                }
-                        }
-                        connection.subscribe(id, name, method, arguments)
+    private fun processFlow(
+        name: String,
+        method: KFunction<*>,
+        arguments: Array<Any?>?
+    ): Flow<Any?> = channelFlow {
+        withConnection { connection ->
+            val id = nextId.getAndIncrement()
+            try {
+                coroutineScope {
+                    launch {
+                        connection.incoming
+                            .filter { it.id == id }
+                            .collect {
+                                val item = parseServerMessage(
+                                    it,
+                                    method.returnType.arguments[0].type!!
+                                )
+                                send(item)
+                            }
                     }
-                } catch (e: FlowCompleted) {
-                    // suppress
-                } catch (e: Exception) {
-                    withContext(NonCancellable) {
-                        connection.unsubscribe(id)
-                    }
-                    throw e
+                    connection.subscribe(id, name, method, arguments)
                 }
+            } catch (e: FlowCompleted) {
+                // suppress
+            } catch (e: Exception) {
+                withContext(NonCancellable) {
+                    connection.unsubscribe(id)
+                }
+                throw e
             }
         }
     }
+
 
     private fun parseServerMessage(message: RSubMessage, castType: KType): Any? {
         return when (message) {
