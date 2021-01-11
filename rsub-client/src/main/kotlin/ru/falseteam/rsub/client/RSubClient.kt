@@ -63,7 +63,7 @@ class RSubClient(
                             log.debug("Connection failed by socket exception: ${e.message}")
                             send(ConnectionState.Disconnected)
                             connectionGlobal?.close()
-                            delay(1000)
+                            delay(2000)
                             log.debug("Reconnecting...")
                         }
                         is CancellationException -> throw e
@@ -132,6 +132,7 @@ class RSubClient(
             // Hack, use map to prevent closing connection.
             // Connection subscription active all time while block executing.
             .mapLatest(block)
+            .retry { !throwOnDisconnect && (it is SocketException) }
             .first()
     }
 
