@@ -244,7 +244,15 @@ class RSubClient(
         method: KFunction<*>,
         arguments: Array<Any?>?
     ): Flow<Any?> = channelFlow {
-        withConnection { connection ->
+        //Check reconnect policy
+        val throwException = when (
+            method.findAnnotation<RSubFlowPolicy>()?.policy ?: RSubFlowPolicy.Policy.THROW_EXCEPTION
+        ) {
+            RSubFlowPolicy.Policy.THROW_EXCEPTION -> true
+            RSubFlowPolicy.Policy.SUPPRESS_EXCEPTION_AND_RECONNECT -> false
+        }
+
+        withConnection(throwException) { connection ->
             val id = nextId.getAndIncrement()
             try {
                 coroutineScope {
