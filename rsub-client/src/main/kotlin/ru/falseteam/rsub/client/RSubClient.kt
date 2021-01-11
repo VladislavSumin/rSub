@@ -22,7 +22,8 @@ import kotlin.reflect.full.findAnnotation
 import kotlin.reflect.jvm.kotlinFunction
 
 class RSubClient(
-    private val connector: RSubConnector
+    private val connector: RSubConnector,
+    private val reconnectInterval: Long = 3000
 ) : RSub() {
     private val log = LoggerFactory.getLogger("rSub.client")
 
@@ -63,7 +64,7 @@ class RSubClient(
                             log.debug("Connection failed by socket exception: ${e.message}")
                             send(ConnectionState.Disconnected)
                             connectionGlobal?.close()
-                            delay(2000)
+                            delay(reconnectInterval)
                             log.debug("Reconnecting...")
                         }
                         is CancellationException -> throw e
@@ -114,6 +115,9 @@ class RSubClient(
     /**
      * Try to subscribe to [connection], wait connected state and execute given block with [ConnectionState.Connected]
      * If connection failed throw [RSubException]
+     *
+     * @param throwOnDisconnect - if false then suppress network exception form socket and [block],
+     * and then if false retry to call [block]
      */
     private suspend fun <T> withConnection(
         throwOnDisconnect: Boolean = true,
@@ -132,7 +136,16 @@ class RSubClient(
             // Hack, use map to prevent closing connection.
             // Connection subscription active all time while block executing.
             .mapLatest(block)
-            .retry { !throwOnDisconnect && (it is SocketException) }
+            .retry {
+                when {
+                    throwOnDisconnect -> false
+                    it is SocketException -> true
+                    else -> {
+                        log.error("Unexpected exception", it)
+                        false
+                    }
+                }
+            }
             .first()
     }
 
