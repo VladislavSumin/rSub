@@ -23,7 +23,8 @@ import kotlin.reflect.jvm.kotlinFunction
 
 class RSubClient(
     private val connector: RSubConnector,
-    private val reconnectInterval: Long = 3000
+    private val reconnectInterval: Long = 3000,
+    connectionKeepAliveTime: Long = 6000,
 ) : RSub() {
     private val log = LoggerFactory.getLogger("rSub.client")
 
@@ -43,7 +44,7 @@ class RSubClient(
      * This shared flow keeps the connection open and automatically reconnects in case of errors.
      * The connection will be maintained as long as there are active subscriptions
      */
-    private val connection = channelFlow {
+    private val connection: Flow<ConnectionState> = channelFlow {
         log.debug("Start observe connection")
         send(ConnectionState.Connecting)
 
@@ -85,7 +86,14 @@ class RSubClient(
     }
         .distinctUntilChanged()
         .onEach { log.debug("New connection status: ${it.status}") }
-        .shareIn(GlobalScope, SharingStarted.WhileSubscribed(replayExpirationMillis = 0), 1)
+        .shareIn(
+            GlobalScope,
+            SharingStarted.WhileSubscribed(
+                stopTimeoutMillis = connectionKeepAliveTime,
+                replayExpirationMillis = 0
+            ),
+            1
+        )
 
     /**
      * Create wrapped connection, with shared receive flow
@@ -138,10 +146,15 @@ class RSubClient(
             .mapLatest(block)
             .retry {
                 when {
+                    //TODO unexpected coroutine behavior, check if fixed on new version
+                    it is CancellationException -> {
+                        log.warn("Connection was canceled by previous connection")
+                        true
+                    }
                     throwOnDisconnect -> false
                     it is SocketException -> true
                     else -> {
-                        log.error("Unexpected exception", it)
+                        log.error("Unexpected exception ", it)
                         false
                     }
                 }
